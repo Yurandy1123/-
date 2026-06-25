@@ -73,14 +73,12 @@ void draw(){
     pushMatrix();
     
     lights();
-    
     translate(0, 0, 20);
-    //fill(0, 225, 0);
-    //box(40);
-    
-    scale(10);
+    scale(0.3);
     
     rotateX(radians(90));
+    rotateY(radians(180));
+    rotateY(frameCount * 0.01);
     
     shape(itemModel[i]);
     
