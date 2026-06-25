@@ -1,8 +1,9 @@
-// プレイヤーと敵の情報
 Player player;
 Enemy enemy;
 
-// 画面管理
+PFont font;
+
+// 画面
 // 0:戦闘
 // 1:魔法陣
 // 2:道具
@@ -10,15 +11,25 @@ Enemy enemy;
 // 4:敗北
 int scene = 0;
 
-// メッセージ表示
 String message = "";
 
 // ターン管理
 boolean playerTurn = true;
 
+// 魔法陣担当から受け取る値
+int magicDamage = 0;
+boolean magicFinished = false;
+
+// 道具担当から受け取る値
+boolean itemFinished = false;
+
 void setup() {
 
   size(1000, 700);
+
+  // 日本語文字化け対策
+  font = createFont("Meiryo", 24, true);
+  textFont(font);
 
   player = new Player(100, 50, 20);
   enemy = new Enemy(100, 15);
@@ -53,11 +64,14 @@ void draw() {
     break;
   }
 
+  checkMagicResult();
+  checkItemResult();
   checkGameEnd();
 }
 
-// プレイヤークラス
-
+//====================
+// プレイヤー
+//====================
 class Player {
 
   int hp;
@@ -65,136 +79,135 @@ class Player {
   int attack;
 
   Player(int hp, int mp, int attack) {
-
     this.hp = hp;
     this.mp = mp;
     this.attack = attack;
   }
 }
 
-
-// 敵クラス
-
+//====================
+// 敵
+//====================
 class Enemy {
 
   int hp;
   int attack;
 
   Enemy(int hp, int attack) {
-
     this.hp = hp;
     this.attack = attack;
   }
 }
 
-
+//====================
 // 戦闘画面
-
+//====================
 void battleScene() {
 
   fill(0);
-
-  textSize(25);
+  textSize(24);
 
   text("HP : " + player.hp, 100, 80);
   text("MP : " + player.mp, 100, 120);
 
   text("敵HP : " + enemy.hp, 850, 80);
 
-  // ターン表示
   if(playerTurn) {
-    text("プレイヤーのターン", 500, 50);
-  }
-  else {
-    text("敵のターン", 500, 50);
+    text("プレイヤーターン", 500, 50);
+  } else {
+    text("敵ターン", 500, 50);
   }
 
-  // モンスター表示
   drawMonster();
 
-  // たたかうボタン
+  fill(0);
   rect(50, 500, 180, 70);
+  rect(250, 500, 180, 70);
+
   fill(255);
   text("たたかう", 140, 535);
-
-  // どうぐボタン
-  fill(0);
-  rect(250, 500, 180, 70);
-  fill(255);
   text("どうぐ", 340, 535);
 
   fill(0);
   text(message, 500, 620);
 }
 
-
-// 戦闘
-
+//====================
+// モンスター表示
+//====================
 void drawMonster() {
-  
+
   fill(255, 0, 0);
   ellipse(500, 250, 150, 150);
 
   fill(0);
   text("敵", 500, 250);
-
 }
 
-
-// 魔法陣
-
+//====================
+// 魔法陣画面
+//====================
 void magicScene() {
 
+  background(30);
 
+  fill(255);
+  text("魔法陣担当の画面", width/2, height/2);
 }
 
-
-
-// 道具
-
+//====================
+// 道具画面
+//====================
 void itemScene() {
 
+  background(50);
+
+  fill(255);
+  text("道具担当の画面", width/2, height/2);
 }
 
-
-// マウス処理
+//====================
+// ボタン処理
+//====================
 void mousePressed() {
 
   if(scene == 0 && playerTurn) {
 
     // たたかう
     if(mouseX > 50 &&
-      mouseX < 230 &&
-      mouseY > 500 &&
-      mouseY < 570) {
+       mouseX < 230 &&
+       mouseY > 500 &&
+       mouseY < 570) {
 
       scene = 1;
     }
 
     // どうぐ
     if(mouseX > 250 &&
-      mouseX < 430 &&
-      mouseY > 500 &&
-      mouseY < 570) {
+       mouseX < 430 &&
+       mouseY > 500 &&
+       mouseY < 570) {
 
       scene = 2;
     }
   }
 }
 
+//====================
+// 魔法陣結果
+//====================
+void checkMagicResult() {
 
-// 攻撃成功
+  if(magicFinished) {
 
-void attackEnemy() {
-
-  if(playerTurn) {
-
-    enemy.hp -= player.attack;
+    enemy.hp -= magicDamage;
 
     message =
-      "プレイヤーの攻撃！ "
-      + player.attack
-      + "ダメージ";
+      "魔法成功！ " +
+      magicDamage +
+      "ダメージ";
+
+    magicFinished = false;
 
     playerTurn = false;
 
@@ -204,9 +217,54 @@ void attackEnemy() {
   }
 }
 
+//====================
+// 道具結果
+//====================
+void checkItemResult() {
 
-// 敵の攻撃
+  if(itemFinished) {
 
+    itemFinished = false;
+
+    playerTurn = false;
+
+    enemyAttack();
+
+    scene = 0;
+  }
+}
+
+//====================
+// 回復アイテム
+//====================
+void useHealItem() {
+
+  player.hp += 30;
+
+  if(player.hp > 100) {
+    player.hp = 100;
+  }
+
+  message = "HPを30回復";
+
+  itemFinished = true;
+}
+
+//====================
+// 攻撃力アップ
+//====================
+void usePowerItem() {
+
+  player.attack += 10;
+
+  message = "攻撃力アップ";
+
+  itemFinished = true;
+}
+
+//====================
+// 敵攻撃
+//====================
 void enemyAttack() {
 
   if(enemy.hp > 0) {
@@ -214,97 +272,49 @@ void enemyAttack() {
     player.hp -= enemy.attack;
 
     message +=
-      " 敵の反撃！ "
-      + enemy.attack
-      + "ダメージ";
+      " 敵の攻撃 " +
+      enemy.attack +
+      "ダメージ";
 
     playerTurn = true;
   }
 }
 
-
-
-// 回復アイテム
-
-void useHealItem() {
-
-  if(playerTurn) {
-
-    player.hp += 30;
-
-    if(player.hp > 100) {
-      player.hp = 100;
-    }
-
-    message = "HPを30回復した";
-
-    playerTurn = false;
-
-    enemyAttack();
-
-    scene = 0;
-  }
-}
-
-
-
-// 攻撃力アップアイテム
-
-void usePowerItem() {
-
-  if(playerTurn) {
-
-    player.attack += 10;
-
-    message = "攻撃力が10上がった";
-
-    playerTurn = false;
-
-    enemyAttack();
-
-    scene = 0;
-  }
-}
-
-
+//====================
 // 勝敗判定
-
+//====================
 void checkGameEnd() {
 
   if(enemy.hp <= 0) {
-
     scene = 3;
   }
 
   if(player.hp <= 0) {
-
     scene = 4;
   }
 }
 
-
-// 勝利画面
-
+//====================
+// 勝利
+//====================
 void winScene() {
 
   background(100, 255, 100);
 
   fill(0);
-
   textSize(60);
 
   text("YOU WIN!", width/2, height/2);
 }
 
-
-// 敗北画面
-
+//====================
+// 敗北
+//====================
 void loseScene() {
 
   background(255, 100, 100);
 
   fill(0);
-
   textSize(60);
 
   text("GAME OVER", width/2, height/2);
