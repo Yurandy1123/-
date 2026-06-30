@@ -1,139 +1,136 @@
-import processing.video.*;
-import jp.nyatla.nyar4psg.*;
+// ============================================================
+// Tool.pde  ★ AR道具担当 ★
+//
+// このファイルが担当するシーン
+//   scene == 2 : AR道具画面
+//
+// 必要ファイル（スケッチの data/ フォルダに入れてください）
+//   camera_para.dat  … ARカメラキャリブレーション
+//   herb.obj         … マーカーID 0 のモデル（回復薬）
+//   bomb.obj         … マーカーID 1 のモデル（爆弾）
+//   seed.obj         … マーカーID 2 のモデル（パワーシード）
+//
+// メインとの連携方法
+//   道具を使ったとき useHealItem() / itemFinished = true を呼ぶと
+//   Ziyuukadai2026.pde が結果を受け取って防御シーンへ移ります。
+// ============================================================
 
-Capture cam;
-MultiMarker nya;
+// ---- 道具専用変数 ----
+float attackBuff  = 1.0;
+int   lastUseFrame = -100;
+int   cooldown    = 300;   // 約5秒（60fps × 5）
 
-//ステータス
-int playerHP = 100;
-int playerMaxHP = 100;
-int enemyHP = 120;
+// =============================================
+// scene 2 : AR道具画面（draw から呼ばれる）
+// =============================================
+void itemARScene() {
 
-float attackBuff = 1.0;
-
-String message = "";
-
-//クールタイム
-int lastUseFrame = -100;
-int cooldown = 300; //5秒
-
-PShape[] itemModel = new PShape[3];
-
-void setup() {
-  size(640, 480, P3D);
-  pixelDensity(1);  //高解像度ディスプレイ対策（ズレ防止のため重要）
-  colorMode(RGB, 255);  //RGB色空間（０～255）
-  println(MultiMarker.VERSION);  //ライブラリのバージョン表示
-  
-  String[] cameras = Capture.list();
-  printArray(cameras);
-
-  //カメラ選択
-  cam = new Capture(this, cameras[2]);
-  
-  //ARエンジン初期化
-  nya=new MultiMarker(this,width,height,"camera_para.dat",NyAR4PsgConfig.CONFIG_PSG);
-  //3つのマーカ登録
-  nya.addNyIdMarker(0,40);//id=0
-  nya.addNyIdMarker(1,40);//id=1
-  nya.addNyIdMarker(2,40);//id=2
-  
-  itemModel[0] = loadShape("herb.obj");
-  itemModel[1] = loadShape("bomb.obj");
-  itemModel[2] = loadShape("seed.obj");
-  
-  println("herb = " + itemModel[0]);
-  println("bomb = " + itemModel[1]);
-  println("seed = " + itemModel[2]);
-
-  
-  //カメラ開始
-  cam.start();
-}
-
-void draw(){
-  if (cam.available()){
-      cam.read();
+  // カメラ or AR が未初期化の場合はエラー表示
+  if (video == null || nya == null) {
+    camera();
+    hint(DISABLE_DEPTH_TEST);
+    background(40);
+    fill(255);
+    textSize(22);
+    text("カメラまたはARライブラリが初期化されていません", width/2, height/2 - 30);
+    textSize(16);
+    text("data/ フォルダに camera_para.dat と *.obj を入れてください", width/2, height/2 + 10);
+    text("Escキーで戦闘画面に戻る", width/2, height/2 + 50);
+    return;
   }
-  
-  nya.detect(cam);  //カメラ映像からマーカ検出
-  
-  background(0);  //背景を黒に,カメラ映像を表示
-  nya.drawBackground(cam);
-  
-  for ( int i = 0 ; i < 3 ; i++ ){
-    if ( (!nya.isExist(i)) ){
-      continue;
-    }
-    
-    //AR座標に切り替え、マーカー位置に座標系を移動
-    //以降の描画はマーカー基準に
+
+  // ARマーカー検出
+  nya.detect(video);
+
+  // カメラ映像を背景に表示
+  background(0);
+  nya.drawBackground(video);
+
+  // 3Dモデルをマーカー上に表示
+  hint(ENABLE_DEPTH_TEST);
+  for (int i = 0; i < 3; i++) {
+    if (!nya.isExist(i)) continue;
+
     nya.beginTransform(i);
-    
     pushMatrix();
-    
-    lights();
-    translate(0, 0, 20);
-    scale(0.3);
-    
-    rotateX(radians(90));
-    rotateY(radians(180));
-    rotateY(frameCount * 0.01);
-    
-    shape(itemModel[i]);
-    
+      lights();
+      translate(0, 0, 20);
+      scale(0.3);
+      rotateX(radians(90));
+      rotateY(radians(180));
+      rotateY(frameCount * 0.01);
+      if (itemModel[i] != null) shape(itemModel[i]);
     popMatrix();
-    
-    nya.endTransform();    //座標を戻す、通常の座標系に
-    
+    nya.endTransform();
+
+    // クールタイムが明けていたらアイテム使用
     useItemByMarker(i);
   }
-  
-  drawUI();
 
+  // ---- UIを2Dで重ねて表示 ----
+  hint(DISABLE_DEPTH_TEST);
+  camera();
+  drawItemUI();
 }
 
-void useItemByMarker ( int id ){
+// =============================================
+// アイテム使用（クールタイム管理）
+// =============================================
+void useItemByMarker(int id) {
   if (frameCount - lastUseFrame < cooldown) return;
   lastUseFrame = frameCount;
 
-  if( id == 0 ){
-    useHerb();
-  } else if ( id == 1 ){
-    useBomb();
-  }else if ( id == 2 ){
-    usePowerSeed();
-  }
+  if      (id == 0) useHerb();
+  else if (id == 1) useBomb();
+  else if (id == 2) usePowerSeed();
 }
 
+// ---- やくそう（回復）----
 void useHerb() {
-  int heal = 30;
-  playerHP = min(playerHP + heal, playerMaxHP);
-  message = "やくそうで回復！";
+  useHealItem();   // Ziyuukadai2026.pde の関数（HP+30 & itemFinished=true）
+  message = "やくそうで HP を30回復！";
 }
 
+// ---- ばくだん（敵にダメージ）----
 void useBomb() {
   int damage = 20;
-  enemyHP = max(enemyHP - damage, 0);
-  message = "ばくだんで攻撃！";
+  enemy.hp = max(enemy.hp - damage, 0);
+  message  = "ばくだんで " + damage + "ダメージ！";
+  itemFinished = true;   // 戦闘続行フラグ
 }
 
+// ---- パワーシード（攻撃力アップ）----
 void usePowerSeed() {
-  attackBuff = 1.5;
-  message = "攻撃力アップ！";
+  if (attackBuff < 1.5) {   // 重複適用防止
+    attackBuff     = 1.5;
+    player.attack  = int(player.attack * 1.5);
+  }
+  message = "攻撃力が上がった！";
+  itemFinished = true;
 }
 
-
-void drawUI() {
-  fill(0, 150);
-  rect(0, 400, width, 80);
+// =============================================
+// 道具画面のUI表示
+// =============================================
+void drawItemUI() {
+  // 下部に半透明バー
+  fill(0, 160);
+  noStroke();
+  rect(0, height - 110, width, 110);
 
   fill(255);
   textSize(16);
+  textAlign(LEFT, CENTER);
+  text("Player HP : " + player.hp + " / 100",  20, height - 90);
+  text("Enemy  HP : " + enemy.hp,               20, height - 68);
+  text("攻撃バフ  : x" + nf(attackBuff, 1, 1), 20, height - 46);
+  text(message,                                  20, height - 24);
 
-  text("Player HP: " + playerHP + "/" + playerMaxHP, 10, 420);
-  text("Enemy HP: " + enemyHP, 10, 440);
-  text("Buff: " + attackBuff, 10, 460);
+  // 右側に操作説明
+  textAlign(RIGHT, CENTER);
+  textSize(14);
+  text("マーカーを見せてアイテムを使う", width - 20, height - 68);
+  text("Escキー : 戦闘画面へ戻る",       width - 20, height - 46);
 
-  text(message, 10, 480);
+  textAlign(CENTER, CENTER);
 }
